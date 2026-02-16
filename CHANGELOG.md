@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.2.15](https://github.com/jdx/mise/compare/v2026.2.14..v2026.2.15) - 2026-02-16
+
+### 🐛 Bug Fixes
+
+- **(task)** improve source freshness checks with dynamic task dirs by @rooperuu in [#8169](https://github.com/jdx/mise/pull/8169)
+
+### New Contributors
+
+- @rooperuu made their first contribution in [#8169](https://github.com/jdx/mise/pull/8169)
+
 ## [2026.2.14](https://github.com/jdx/mise/compare/v2026.2.13..v2026.2.14) - 2026-02-16
 
 ### 🚀 Features
