@@ -80,6 +80,12 @@ impl Lock {
             let tools = self.get_tools_to_lock(&config, ts, is_local);
 
             if tools.is_empty() {
+                // If all tools were removed from config, a full lock run should prune stale entries.
+                if !self.dry_run && self.should_prune_stale_lockfile_entries() {
+                    let mut lockfile = Lockfile::read(&lockfile_path)?;
+                    self.prune_stale_entries_if_needed(&mut lockfile, &tools);
+                    lockfile.write(&lockfile_path)?;
+                }
                 continue;
             }
             any_tools = true;
@@ -116,6 +122,7 @@ impl Lock {
 
             // Process tools and update lockfile
             let mut lockfile = Lockfile::read(&lockfile_path)?;
+            self.prune_stale_entries_if_needed(&mut lockfile, &tools);
             let results = self
                 .process_tools(&settings, &tools, &target_platforms, &mut lockfile)
                 .await?;
@@ -144,6 +151,28 @@ impl Lock {
         }
 
         Ok(())
+    }
+
+    fn should_prune_stale_lockfile_entries(&self) -> bool {
+        self.tool.is_empty()
+    }
+
+    fn prune_stale_entries_if_needed(
+        &self,
+        lockfile: &mut Lockfile,
+        tools: &[(crate::cli::args::BackendArg, crate::toolset::ToolVersion)],
+    ) {
+        // When locking all tools, prune stale tool entries that are no longer configured.
+        // For filtered runs (`mise lock <tool>`), preserve other tools in the lockfile.
+        if self.should_prune_stale_lockfile_entries() {
+            let configured_tools: BTreeSet<String> =
+                tools.iter().map(|(ba, _)| ba.short.clone()).collect();
+            let configured_backends: BTreeSet<String> = tools
+                .iter()
+                .flat_map(|(ba, _)| [ba.short.clone(), ba.full()])
+                .collect();
+            lockfile.retain_tools_by_short_or_backend(&configured_tools, &configured_backends);
+        }
     }
 
     /// Get the lockfile path for either the local or non-local pass.
@@ -479,3 +508,115 @@ static AFTER_LONG_HELP: &str = color_print::cstr!(
     $ <bold>mise lock --local</bold>               # update mise.local.lock for local configs
 "#
 );
+
+#[cfg(test)]
+mod tests {
+    use super::Lock;
+    use crate::cli::args::ToolArg;
+    use crate::lockfile::{Lockfile, PlatformInfo};
+    use crate::toolset::{ToolRequest, ToolSource, ToolVersion};
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+    use std::sync::Arc;
+
+    fn lock_cmd(tool_filters: &[&str]) -> Lock {
+        Lock {
+            tool: tool_filters
+                .iter()
+                .map(|tool| ToolArg::from_str(tool).unwrap())
+                .collect(),
+            jobs: None,
+            dry_run: false,
+            platform: vec![],
+            local: false,
+        }
+    }
+
+    fn lockfile_with_dummy() -> Lockfile {
+        let mut lockfile = Lockfile::default();
+        lockfile.set_platform_info(
+            "dummy",
+            "1.0.0",
+            Some("asdf:dummy"),
+            &BTreeMap::new(),
+            "linux-x64",
+            PlatformInfo {
+                checksum: Some("sha256:dummy".to_string()),
+                ..Default::default()
+            },
+        );
+        lockfile
+    }
+
+    fn lockfile_with_legacy_aqua_jq() -> Lockfile {
+        let mut lockfile = Lockfile::default();
+        lockfile.set_platform_info(
+            "jq",
+            "1.7.1",
+            Some("aqua:jqlang/jq"),
+            &BTreeMap::new(),
+            "linux-x64",
+            PlatformInfo {
+                checksum: Some("sha256:jq".to_string()),
+                ..Default::default()
+            },
+        );
+        lockfile
+    }
+
+    fn configured_tool(
+        backend: &str,
+        version: &str,
+    ) -> (crate::cli::args::BackendArg, ToolVersion) {
+        let ba = crate::cli::args::BackendArg::new(backend.to_string(), Some(backend.to_string()));
+        let request =
+            ToolRequest::new(Arc::new(ba.clone()), version, ToolSource::Argument).unwrap();
+        let tv = ToolVersion::new(request, version.to_string());
+        (ba, tv)
+    }
+
+    #[test]
+    fn test_should_prune_stale_lockfile_entries_without_tool_filter() {
+        let cmd = lock_cmd(&[]);
+        assert!(cmd.should_prune_stale_lockfile_entries());
+    }
+
+    #[test]
+    fn test_should_not_prune_stale_lockfile_entries_with_tool_filter() {
+        let cmd = lock_cmd(&["tiny"]);
+        assert!(!cmd.should_prune_stale_lockfile_entries());
+    }
+
+    #[test]
+    fn test_prune_stale_entries_with_empty_tools_prunes_all_entries() {
+        let cmd = lock_cmd(&[]);
+        let mut lockfile = lockfile_with_dummy();
+        cmd.prune_stale_entries_if_needed(&mut lockfile, &[]);
+        assert!(lockfile.all_platform_keys().is_empty());
+    }
+
+    #[test]
+    fn test_prune_stale_entries_with_filter_keeps_existing_entries() {
+        let cmd = lock_cmd(&["tiny"]);
+        let mut lockfile = lockfile_with_dummy();
+        cmd.prune_stale_entries_if_needed(&mut lockfile, &[]);
+        assert_eq!(
+            lockfile.all_platform_keys(),
+            std::collections::BTreeSet::from(["linux-x64".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_prune_stale_entries_preserves_legacy_keyed_backend_match() {
+        let cmd = lock_cmd(&[]);
+        let mut lockfile = lockfile_with_legacy_aqua_jq();
+        let tools = vec![configured_tool("aqua:jqlang/jq", "1.7.1")];
+
+        cmd.prune_stale_entries_if_needed(&mut lockfile, &tools);
+
+        assert_eq!(
+            lockfile.all_platform_keys(),
+            std::collections::BTreeSet::from(["linux-x64".to_string()])
+        );
+    }
+}
