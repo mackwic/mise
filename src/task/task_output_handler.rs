@@ -350,3 +350,75 @@ impl OutputHandler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{OutputHandler, OutputHandlerConfig};
+    use crate::task::task_output::TaskOutput;
+
+    #[test]
+    fn defaults_to_interleave_for_linear_graphs() {
+        let handler = OutputHandler::new(OutputHandlerConfig {
+            prefix: false,
+            interleave: false,
+            output: None,
+            silent: false,
+            quiet: false,
+            raw: false,
+            is_linear: true,
+            jobs: Some(8),
+        });
+
+        assert_eq!(handler.output(None), TaskOutput::Interleave);
+    }
+
+    #[test]
+    fn defaults_to_prefix_for_non_linear_graphs_with_parallel_jobs() {
+        let handler = OutputHandler::new(OutputHandlerConfig {
+            prefix: false,
+            interleave: false,
+            output: None,
+            silent: false,
+            quiet: false,
+            raw: false,
+            is_linear: false,
+            jobs: Some(8),
+        });
+
+        // Non-linear graphs with multiple jobs default to prefix output.
+        assert_eq!(handler.output(None), TaskOutput::Prefix);
+    }
+
+    #[test]
+    fn single_job_forces_interleave_even_for_non_linear_graphs() {
+        let handler = OutputHandler::new(OutputHandlerConfig {
+            prefix: false,
+            interleave: false,
+            output: None,
+            silent: false,
+            quiet: false,
+            raw: false,
+            is_linear: false,
+            jobs: Some(1),
+        });
+
+        assert_eq!(handler.output(None), TaskOutput::Interleave);
+    }
+
+    #[test]
+    fn explicit_prefix_output_overrides_linear_default() {
+        let handler = OutputHandler::new(OutputHandlerConfig {
+            prefix: false,
+            interleave: false,
+            output: Some(TaskOutput::Prefix),
+            silent: false,
+            quiet: false,
+            raw: false,
+            is_linear: true,
+            jobs: Some(8),
+        });
+
+        // Explicitly requested prefix output must override the linear-graph default.
+        assert_eq!(handler.output(None), TaskOutput::Prefix);
+    }
+}
