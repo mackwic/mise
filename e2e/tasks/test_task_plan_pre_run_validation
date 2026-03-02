@@ -21,7 +21,9 @@ run = "echo root"
 EOF2
 
 assert_fail_contains "mise run --plan root" "pre-run validation failed"
-assert_fail_contains "mise run --plan root" "invalid task \`bad_orchestrator\`"
+# shellcheck disable=SC2016 # backticks are expected literally in error message assertions
+assert_fail_contains "mise run --plan root" 'invalid task `bad_orchestrator`'
 assert_fail_contains "mise run --plan root" "interactive=true is only allowed on runtime tasks"
-assert_fail_contains "mise run --plan root" "invalid task \`bad_silent\`"
-assert_fail_contains "mise run --plan root" "interactive=true is incompatible with silent=true|\"stdout\"|\"stderr\""
+# shellcheck disable=SC2016 # backticks are expected literally in error message assertions
+assert_fail_contains "mise run --plan root" 'invalid task `bad_silent`'
+assert_fail_contains "mise run --plan root" 'interactive=true is incompatible with silent=true|"stdout"|"stderr"'
