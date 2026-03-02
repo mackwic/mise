@@ -270,8 +270,7 @@ Marks a task as terminal-interactive. This is intended for prompts and tools tha
 When `interactive = true`:
 
 - stdin/stdout/stderr are always inherited directly from the terminal (passthrough I/O)
-- runtime execution is globally exclusive while the interactive task is active (no overlapping runtime tasks)
-- dependencies may run before it (including in parallel), but the interactive task is the execution barrier
+- an interactive task acts as a global barrier for runtime tasks: its dependencies may run before it (including in parallel), but while it is active no other runtime task can execute concurrently
 - multiple interactive tasks in one run are serialized deterministically
 - task-level `raw = true` is allowed but redundant (interactive already implies passthrough I/O)
 - live line-by-line redaction is not guaranteed; mise will emit a warning when redactions are configured

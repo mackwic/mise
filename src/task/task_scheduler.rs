@@ -855,6 +855,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_interactive_barrier_release_wakes_all_runtime_waiters() {
+        // MatrixRef: G02,F10 / C12,C13
+        let barrier = InteractiveBarrier::new();
+        let interactive_guard = barrier.acquire_interactive().await;
+
+        let barrier_a = barrier.clone();
+        let waiter_a = tokio::spawn(async move {
+            let _guard = barrier_a.acquire_runtime().await;
+        });
+        let barrier_b = barrier.clone();
+        let waiter_b = tokio::spawn(async move {
+            let _guard = barrier_b.acquire_runtime().await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!waiter_a.is_finished());
+        assert!(!waiter_b.is_finished());
+
+        drop(interactive_guard);
+
+        tokio::time::timeout(Duration::from_secs(1), waiter_a)
+            .await
+            .unwrap()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), waiter_b)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(barrier.snapshot(), (false, 0));
+    }
+
+    #[tokio::test]
     async fn test_interactive_barrier_waiter_abort_does_not_leak_state() {
         // MatrixRef: G01,G02 / C12,C13
         let barrier = InteractiveBarrier::new();
