@@ -59,6 +59,42 @@ Configure with `jobs` config or `MISE_JOBS` env var
 
 Don't actually run the task(s), just print them in order of execution
 
+### `--plan <PLAN>`
+
+Print the static execution plan and exit without executing tasks
+
+Optional formats:
+- `summary` (default)
+- `json`
+- `explain`
+
+Plan output includes each task declaration reference (`source:line`) for easier tracking.
+Config `.toml` files used to build the plan are listed at the top.
+Stage numbers are execution order.
+Tasks are tagged as `[task]`, `[script]`, or `[interactive]`.
+Group scopes are rendered as ASCII guides (`┌─ group`, `│`, `└─ group`) instead of virtual task entries.
+Parallel stages with multiple runnable tasks are expanded as `∥ parallel (n)` blocks.
+In `json`, static generated tasks keep the declaration of the source task that produced them.
+
+Examples:
+- `--plan`
+- `--plan=json`
+- `--plan=explain`
+
+**Choices:**
+
+- `summary`
+- `json`
+- `explain`
+
+### `--changed… <PATH>`
+
+Changed files to analyze impact against task sources in `--plan` mode
+
+Can be provided multiple times:
+- `--changed=src/main.ts`
+- `--changed=src/a.ts --changed=src/b.ts`
+
 ### `-o --output <OUTPUT>`
 
 Change how tasks information is output when running tasks
@@ -143,4 +179,10 @@ $ mise run lint ::: test ::: check
 
 # Execute multiple tasks each with their own arguments.
 $ mise run cmd1 arg1 arg2 ::: cmd2 arg1 arg2
+
+# Print the static execution plan without running tasks.
+$ mise run --plan test
+$ mise run --plan=json test
+$ mise run --plan=explain test
+$ mise run --plan=explain --changed=src/main.ts test
 ```
